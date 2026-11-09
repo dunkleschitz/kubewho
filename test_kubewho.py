@@ -5,6 +5,7 @@ Agreement test vs real kubectl runs only when KUBEWWHO_KUBECTL points at
 a kubectl binary (used during the build to verify the merge model).
 """
 import base64
+import datetime
 import json
 import os
 import stat
@@ -28,13 +29,32 @@ def _split_certs(blob):
 
 _CERTS = _split_certs(VALID_CERT_B64)
 VALID_CERT = _CERTS[0]   # expires 2036-10-20
-SOON_CERT = _CERTS[1]    # expires 2026-11-02 (~10d after build date)
+
+
+def _synthetic_der_b64(not_before, not_after):
+    # Synthetic minimal DER: SEQUENCE { UTCTime notBefore, UTCTime notAfter }
+    # kubewho's cert_expiry scans for the two UTCTime values, so this is
+    # enough to exercise the K06 paths without a real certificate.
+    def _utc(dt):
+        return dt.strftime("%y%m%d%H%M%SZ").encode()
+    der = (b"\x30\x1e" + b"\x17\x0d" + _utc(not_before)
+           + b"\x17\x0d" + _utc(not_after))
+    return base64.b64encode(der).decode()
+
+
+def _soon_der_b64():
+    # "Expiring soon" is relative to *now* (K06: notAfter within 30 days).
+    # A fixed fixture cert went stale on 2026-11-02 and started failing
+    # as genuinely expired — generate it relative to the run date.
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return _synthetic_der_b64(now - datetime.timedelta(days=1),
+                              now + datetime.timedelta(days=10))
 
 
 def _expired_der_b64():
-    # Synthetic minimal DER: SEQUENCE { UTCTime 2020-01-01, UTCTime 2020-06-01 }
-    der = b"\x30\x1e" + b"\x17\x0d" + b"200101000000Z" + b"\x17\x0d" + b"200601000000Z"
-    return base64.b64encode(der).decode()
+    return _synthetic_der_b64(
+        datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc),
+        datetime.datetime(2020, 6, 1, tzinfo=datetime.timezone.utc))
 
 
 BASIC_CONFIG = """\
@@ -230,7 +250,7 @@ class KubeWhoTest(unittest.TestCase):
         self.assertIn("K11", out)
 
     def test_k06_cert_expiry(self):
-        for b64, expect in ((VALID_CERT, None), (SOON_CERT, "expiring soon"),
+        for b64, expect in ((VALID_CERT, None), (_soon_der_b64(), "expiring soon"),
                             (_expired_der_b64(), "expired")):
             cfg = BASIC_CONFIG.replace(
                 "token: TOKEN-AAA",
