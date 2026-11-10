@@ -108,6 +108,11 @@ class KubeWhoTest(unittest.TestCase):
         p = os.path.join(self.tmp.name, name)
         with open(p, "w") as fh:
             fh.write(content)
+        # Secret-bearing fixtures must be owner-only: kubewho flags
+        # world-readable kubeconfigs (K13), and the default umask
+        # varies (022 on CI runners makes 0644 files) — without this
+        # the rc==0 tests fail anywhere the umask is permissive.
+        os.chmod(p, 0o600)
         return p
 
     def _run(self, *argv, env_extra=None):
