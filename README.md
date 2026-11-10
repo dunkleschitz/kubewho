@@ -142,5 +142,5 @@ curl -O <repo-url>/kubewho.py && chmod +x kubewho.py
 - [x] Never-prints-secret + never-executes-plugin + no-subprocess tests
 - [x] README documents problem, usage, rules, model, safety, limitations
 - [x] CHANGELOG.md present
-- [x] License: MIT (pending Godsby's approval per charter)
-- [ ] Godsby's approval before first public publication
+- [x] License: MIT (see LICENSE)
+- [ ] Maintainer approval before first public publication
